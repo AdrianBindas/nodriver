@@ -67,7 +67,7 @@ classifiers = [  # Optional
 
 dependencies = [
       "mss",
-      "websockets>=11",
+      "websockets>=13",
       "deprecated"
 ]
 

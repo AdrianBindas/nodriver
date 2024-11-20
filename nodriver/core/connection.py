@@ -20,6 +20,7 @@ from typing import (
 )
 
 import websockets
+from websockets.protocol import State
 
 from . import util
 from .. import cdp
@@ -228,7 +229,7 @@ class Connection(metaclass=CantTouchThis):
     def closed(self):
         if not self.websocket:
             return True
-        return self.websocket.closed
+        return self.websocket.state is State.CLOSED
 
     def add_handler(
         self,
@@ -280,7 +281,7 @@ class Connection(metaclass=CantTouchThis):
         :return:
         """
 
-        if not self.websocket or self.websocket.closed:
+        if self.closed:
             try:
                 self.websocket = await websockets.connect(
                     self.websocket_url,
@@ -306,7 +307,7 @@ class Connection(metaclass=CantTouchThis):
         """
         closes the websocket connection. should not be called manually by users.
         """
-        if self.websocket and not self.websocket.closed:
+        if self.websocket and not self.closed:
             if self.listener and self.listener.running:
                 self.listener.cancel()
                 self.enabled_domains.clear()
@@ -409,7 +410,7 @@ class Connection(metaclass=CantTouchThis):
         :return:
         """
         await self.aopen()
-        if not self.websocket or self.closed:
+        if self.closed:
             return
         if self._owner:
             browser = self._owner
