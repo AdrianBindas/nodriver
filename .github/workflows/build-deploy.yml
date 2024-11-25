@@ -1,0 +1,57 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+  workflow_dispatch:     # Allow manual trigger
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: "Set up Python"
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: ".python-version"
+  
+    - name: Sync the depdendencies
+      run: |
+        eval `ssh-agent -s`
+        ssh-add - <<< '${{ secrets.SSH_KEY }}'
+        uv sync --all-extras --dev
+
+    - name: Build Docker Image
+      run: |
+        docker build --ssh default=${{ secrets.SSH_KEY }} -t social-nodriver:latest .
+
+    - name: Save Docker Image as Tar File
+      run: |
+        docker save -o social-nodriver.tar social-nodriver:latest
+
+    - name: Create EC2 Key
+      env:
+        EC2_KEY_BASE64: ${{ secrets.EC2_KEY_BASE64 }}
+      run: echo "$EC2_KEY_BASE64" > ec2_key.pem
+
+    - name: Set Permissions for EC2 Key
+      run: chmod 600 ec2_key.pem
+
+    - name: Upload Docker Image to EC2 Instance
+      run: |
+        scp -o StrictHostKeyChecking=no -i ec2_key.pem social-nodriver.tar ec2-user@${{ secrets.EC2_INSTANCE_IP }}:/home/ec2-user/
+
+    - name: Load Docker Image on EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_INSTANCE_IP }} "docker load -i /home/ec2-user/social-nodriver.tar && rm /home/ec2-user/social-nodriver.tar"
+           
+    - name: Clean Up Key File
+      run: rm ec2_key.pem

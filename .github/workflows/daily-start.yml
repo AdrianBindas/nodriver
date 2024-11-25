@@ -1,0 +1,38 @@
+name: Daily Start
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # This will trigger the workflow daily at 8 AM in Bratislava (UTC+2).
+  workflow_dispatch:     # Allow manual trigger
+
+jobs:
+  start-container:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Create EC2 Key
+      env:
+        EC2_KEY_BASE64: ${{ secrets.EC2_KEY_BASE64 }}
+      run: echo "$EC2_KEY_BASE64" > ec2_key.pem
+
+    - name: Set Permissions for EC2 Key
+      run: chmod 600 ec2_key.pem
+
+    - name: Start Docker Container for Anonymous User on EC2
+      env:
+        PROXY_SERVER: ${{secrets.PROXY_SERVER}}
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_INSTANCE_IP }} "docker run --rm -v ~/default_scenario:/app/default_scenario social-nodriver:latest"
+
+    - name: Sync Investigation Data to S3
+      if: ${{ ! cancelled() }}
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_INSTANCE_IP }} "aws s3 sync ~/default_scenario s3://ai-auditology-passive-observer --region eu-west-1"
+
+    - name: Remove Investigation Folder
+      if: ${{ ! cancelled() }}
+      run: |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem ec2-user@${{ secrets.EC2_INSTANCE_IP }} "sudo rm -rf ~/default_scenario"
+
+    - name: Clean Up Key File
+      run: rm ec2_key.pem

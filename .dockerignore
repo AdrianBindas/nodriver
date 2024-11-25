@@ -1,0 +1,8 @@
+.github
+.pytest_cache
+.ruff_cache
+.venv
+default_scenario
+docs
+tests
+__pycache__/
